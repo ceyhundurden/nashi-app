@@ -69,7 +69,7 @@ public sealed class Toolchain(string directory,string? searchPath=null)
             if(Directory.Exists(DirectoryPath))foreach(var file in Directory.GetFiles(DirectoryPath)){var kept=Path.Combine(stage,Path.GetFileName(file));if(!File.Exists(kept)&&ToolInstallation.UsableFile(file))File.Copy(file,kept);}
             ToolInstallation.Publish(stage,DirectoryPath,Complete);progress?.Report(new(1,"Media tools ready"));
         }
-        finally{if(Directory.Exists(stage))Directory.Delete(stage,true);}
+        finally{ToolInstallation.TryDeleteDirectory(stage);}
     }
     private sealed record Package(string Name,string Url,string Sha256,string[] Files);
 }

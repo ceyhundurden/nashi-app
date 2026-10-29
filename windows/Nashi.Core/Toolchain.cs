@@ -67,7 +67,8 @@ public sealed class Toolchain(string directory,string? searchPath=null)
             token.ThrowIfCancellationRequested();
             // Publish replaces the whole folder, so carry over downloaded tools whose package was skipped because PATH has them.
             if(Directory.Exists(DirectoryPath))foreach(var file in Directory.GetFiles(DirectoryPath)){var kept=Path.Combine(stage,Path.GetFileName(file));if(!File.Exists(kept)&&ToolInstallation.UsableFile(file))File.Copy(file,kept);}
-            ToolInstallation.Publish(stage,DirectoryPath,Complete);progress?.Report(new(1,"Media tools ready"));
+            // Publishing may wait out a brief antivirus lock; keep that wait off the UI thread.
+            await Task.Run(()=>ToolInstallation.Publish(stage,DirectoryPath,Complete));progress?.Report(new(1,"Media tools ready"));
         }
         finally{ToolInstallation.TryDeleteDirectory(stage);}
     }

@@ -52,7 +52,7 @@ public sealed class GlobalDragController:IDisposable
         UpdateShortcut();if(!preferences.Value.Enabled||!OwnerAvailable){wheel?.Close();wheel=null;down=false;opened=false;hint=null;return;}var held=PrimaryMouseButton.IsPressed;GetCursorPos(out var point);
         if(!held){if(down){down=false;opened=false;hint=null;if(wheel is {IsVisible:true}){var old=wheel;var dismiss=new System.Windows.Threading.DispatcherTimer{Interval=TimeSpan.FromMilliseconds(150)};dismiss.Tick+=(_,_)=>{dismiss.Stop();if(old.IsVisible)old.Close();};dismiss.Start();}wheel=null;}return;}
         if(!down){down=true;start=point;opened=false;hint=null;return;}if(Math.Abs(point.X-start.X)+Math.Abs(point.Y-start.Y)<10&&!opened)return;
-        hint??=Task.Run(()=>LinkAt(start));var p=preferences.Value;var kind=Mode(Chord(),p);
+        var origin=start;hint??=Task.Run(()=>LinkAt(origin));var p=preferences.Value;var kind=Mode(Chord(),p);
         // Keep the same OLE drop target and position while switching modifiers.
         // A closed/cancelled wheel must not reopen until the next mouse gesture.
         if(opened){if(wheel is {IsVisible:true})wheel.SetMode(kind);return;}
@@ -106,7 +106,7 @@ internal sealed class GlobalDropWheel:Window
     }
     private void Track(DragEventArgs e)
     {
-        files=e.Data.GetData(DataFormats.FileDrop) as string[]??[];web=Payload(e.Data);
+        files=e.Data.GetData(DataFormats.FileDrop) as string[]??[];web=files.Length>0?null:DragPayload.Parse(e.Data,hint());
         // OLE supplies modifier changes even with a stationary pointer; use its
         // state again on Drop so an old segment can never execute after a switch.
         SetMode(GlobalDragController.Mode(e.KeyStates,preferences()));var updated=Choices(files,web);
@@ -119,10 +119,9 @@ internal sealed class GlobalDropWheel:Window
         else{var angle=(Math.Atan2(p.Y-270,p.X-270)*180/Math.PI-WheelPresentation.StartAngle(choices.Count)+360+180d/choices.Count)%360;var index=(int)(angle/(360d/choices.Count));var id=choices[index].Id;if(id!=selection){selection=id;Feedback.Play();}Highlight(index);}
         e.Effects=selection.Length>0?DragDropEffects.Copy:DragDropEffects.None;e.Handled=true;
     }
-    private WebMediaPayload? Payload(IDataObject data)=>DragPayload.Parse(data,hint());
     private IReadOnlyList<ToolChoice> Choices(string[] files,WebMediaPayload? web)
     {
-        if(files.Length>0&&web is null)
+        if(files.Length>0)
         {
             if(mode=="convert")return FeatureCatalog.Formats(files).Select(f=>new ToolChoice("convert:"+f,f.ToUpperInvariant(),"↗")).ToArray();
             if(mode=="actions")return [new("share","Share","◉"),new("float","Float","▣"),new("copy","Copy","▱"),new("move","Move","↗"),new("copyPath","Copy Path","↪"),new("terminal","Terminal",">_")];

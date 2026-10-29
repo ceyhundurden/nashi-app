@@ -20,6 +20,7 @@ internal static class GlobalDragModeChecks
         L10n.Language="en";Feedback.Enabled=false;
         try
         {
+            LocalFilePrecedence(check);
             var data=new DataObject(DataFormats.FileDrop,new[]{"Synthetic archive.zip"});
             string? chosen=null;
             var wheel=new GlobalDropWheel("convert",1,(_,id)=>chosen=id,()=>null);
@@ -79,5 +80,32 @@ internal static class GlobalDragModeChecks
             finally{empty.Close();}
         }
         finally{L10n.Language=language;Feedback.Enabled=feedback;}
+    }
+    private static void LocalFilePrecedence(Action<bool,string> check)
+    {
+        const string url="https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+        var data=new DataObject(DataFormats.FileDrop,new[]{"Synthetic archive.zip"});
+        data.SetData(DataFormats.UnicodeText,url);
+        data.SetData(DataFormats.Html,$"<a href=\"{url}\">source</a>");
+        check(DragPayload.Parse(data,url) is null,"A real file drop was classified as web media because it also carried a URL");
+        string? selected=null;var hintReads=0;
+        var wheel=new GlobalDropWheel("convert",1,(_,id)=>selected=id,()=>{hintReads++;return url;});
+        try
+        {
+            wheel.Show();wheel.UpdateLayout();var canvas=(Canvas)((Viewbox)wheel.Content).Child;
+            foreach(var (keys,expected,count) in new[]{(DragDropKeyStates.ShiftKey,"convert",FeatureCatalog.Formats(["Synthetic archive.zip"]).Length),(DragDropKeyStates.ControlKey,"tools",FeatureCatalog.Tools(["Synthetic archive.zip"]).Length),(DragDropKeyStates.AltKey,"actions",6)})
+            {
+                wheel.RaiseEvent(Event(data,keys,canvas,DragDrop.DragOverEvent));
+                check(wheel.Title=="Nashi · "+expected&&canvas.Children.OfType<System.Windows.Shapes.Path>().Count()==count,"A file drop with a URL offered download choices in "+expected+" mode");
+            }
+            wheel.RaiseEvent(Event(data,DragDropKeyStates.AltKey,canvas,DragDrop.DropEvent));
+            check(selected=="share","Dropping a local file with a URL invoked a download action");
+            check(hintReads==0,"A local file drag consulted the unrelated source URL hint");
+        }
+        finally{wheel.Close();}
+        var browser=new DataObject(DataFormats.UnicodeText,url);
+        check(DragPayload.Parse(browser) is {Kind:"youtube"},"A genuine browser URL stopped offering web media actions");
+        var empty=new DataObject(DataFormats.FileDrop,Array.Empty<string>());empty.SetData(DataFormats.UnicodeText,url);
+        check(DragPayload.Parse(empty) is {Kind:"youtube"},"An empty file format hid a genuine browser URL");
     }
 }

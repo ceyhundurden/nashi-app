@@ -41,7 +41,7 @@ internal static class GlobalGestureChecks
         var discoveryLimit=DateTime.UtcNow.AddSeconds(25);while(!discovery.IsCompleted&&DateTime.UtcNow<discoveryLimit)DesktopInput.Pump(30);if(!discovery.IsCompleted){DesktopCapture.Save(Path.Combine(root,"explorer-discovery.png"));throw new TimeoutException("Explorer UI Automation did not respond.");}if(discovery.IsFaulted)DesktopCapture.Save(Path.Combine(root,"explorer-discovery.png"));var fixture=discovery.GetAwaiter().GetResult();var handle=fixture.Handle;var bounds=fixture.Bounds;if(bounds.IsEmpty)throw new Exception("Explorer's source file has no visible bounds.");
         var settings=new PreferencesStore(Path.Combine(root,"Gesture preferences"));string? selected=null;string[]? received=null;
         using var controller=new GlobalDragController(owner,settings,(id,data,hint)=>{selected=id;received=data.GetData(DataFormats.FileDrop) as string[];},()=>selected="link-shortcut");
-        void Drag(Key modifier,string mode,string expected)
+        void Drag(Key modifier,string mode,string expected,params (Key Key,string Mode)[] switches)
         {
             phase="dragging "+mode;selected=null;string? state=null;SetForegroundWindow(handle);DesktopInput.Pump(200);var start=new Point(bounds.Left+bounds.Width/2,bounds.Top+bounds.Height/2);
             var driver=Task.Run(()=>
@@ -50,6 +50,12 @@ internal static class GlobalGestureChecks
                 try
                 {
                     DesktopInput.MovePointer(new(start.X+45,start.Y+20));Thread.Sleep(150);DesktopInput.Hold(modifier,true);var wheel=IntPtr.Zero;for(var n=0;n<30&&wheel==IntPtr.Zero;n++){Thread.Sleep(100);wheel=FindWindow(null,"Nashi · "+mode);}if(wheel==IntPtr.Zero||!GetWindowRect(wheel,out var r))throw new Exception("The global "+mode+" wheel did not open during the Explorer drag.");
+                    foreach(var next in switches)
+                    {
+                        DesktopInput.Hold(modifier,false);modifier=next.Key;DesktopInput.Hold(modifier,true);
+                        var updated=IntPtr.Zero;for(var n=0;n<30&&updated==IntPtr.Zero;n++){Thread.Sleep(100);updated=FindWindow(null,"Nashi · "+next.Mode);}
+                        if(updated!=wheel)throw new Exception("Changing to "+next.Mode+" did not reuse the active Explorer drop target.");
+                    }
                     DesktopInput.MovePointer(new((r.Left+r.Right)/2d,r.Top+(r.Bottom-r.Top)*.18));Thread.Sleep(400);state=controller.ActiveWheel?.State;owner.Dispatcher.BeginInvoke(()=>DesktopCapture.Save(Path.Combine(root,"global-drag-"+mode+".png")));Thread.Sleep(200);
                 }
                 finally{DesktopInput.HoldMouse(false);DesktopInput.Hold(modifier,false);}
@@ -59,6 +65,8 @@ internal static class GlobalGestureChecks
         try
         {
             Drag(Key.LeftCtrl,"tools","compress");Drag(Key.LeftAlt,"actions","share");Drag(Key.LeftShift,"convert","convert:"+FeatureCatalog.Formats([file])[0]);
+            Drag(Key.LeftShift,"convert","share",(Key.LeftCtrl,"tools"),(Key.LeftAlt,"actions"));
+            Drag(Key.LeftAlt,"actions","convert:"+FeatureCatalog.Formats([file])[0],(Key.LeftShift,"convert"));
             // A mouse drag that carries no files (e.g. Shift+drag text selection) must not show a wheel.
             phase="plain Shift-drag";var plain=new Window{Width=320,Height=200,Left=bounds.Left,Top=bounds.Top,WindowStartupLocation=WindowStartupLocation.Manual,Content=new System.Windows.Controls.Border{Background=System.Windows.Media.Brushes.DarkSlateGray}};plain.Show();plain.Activate();DesktopInput.Pump(200);
             try

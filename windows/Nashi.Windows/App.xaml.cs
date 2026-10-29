@@ -86,10 +86,11 @@ public partial class App:Application
         windowManagement=new WindowManagement(notice:message=>MessageBox.Show(L10n.Text(message),L10n.Text("Window arrangement"),MessageBoxButton.OK,MessageBoxImage.Information),isEnabled:()=>window.WindowManagementEnabled);
     }
     internal static string LogDirectory=>Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Nashi","Logs");
-    private static readonly Queue<DateTime> recentErrors=new();private static bool reporting;
+    private static readonly Queue<DateTime> recentErrors=new();private static bool reporting;private static readonly Lock logLock=new();
     internal static void Log(string? details,string kind)
     {
-        try
+        // UI and background-task errors can arrive together; serialize rotation and appends.
+        lock(logLock)try
         {
             Directory.CreateDirectory(LogDirectory);var file=Path.Combine(LogDirectory,"errors.log");
             if(File.Exists(file)&&new FileInfo(file).Length>1_000_000)File.Move(file,file+".old",true);
@@ -107,7 +108,7 @@ public partial class App:Application
         if(!reporting)
         {
             reporting=true;
-            try{MessageBox.Show(L10n.Text("Something went wrong, but Nashi kept running. Details were saved to the Nashi Logs folder.")+Environment.NewLine+Environment.NewLine+error.Message,"Nashi",MessageBoxButton.OK,MessageBoxImage.Warning);}
+            try{MessageBox.Show(L10n.Text("Something went wrong, but Nashi kept running. Details were saved to the Nashi Logs folder."),"Nashi",MessageBoxButton.OK,MessageBoxImage.Warning);}
             finally{reporting=false;}
         }
         return true;
